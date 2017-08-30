@@ -1,66 +1,8 @@
-import scala.Int
-
 /**
-  * Created by mmeneses on 15-08-17.
+  * Created by mmeneses on 29-08-17.
   */
 
-object Parser {
-  def parseExpr(code: String): Expr = {
-    return null
-  }
-
-  def execute (expr: Expr, env: Env = EmptyEnv()) : ValL = {
-    expr match {
-      case Num(n) => ValInt(n)
-      case Bool(b) => ValBool(b)
-      case Add(n1, n2) => makeVal(openInt(execute(n1, env)) + openInt(execute(n2,env)))
-      case Subst(n1, n2) => makeVal(openInt(execute(n1, env)) - openInt(execute(n2,env)))
-      case Mul(n1, n2) => makeVal(openInt(execute(n1, env)) * openInt(execute(n2,env)))
-      case IfExpr(condPart, thenPart, elsePart) => if (openBool(execute(condPart,env))) {
-        execute(thenPart,env)
-      } else {
-        execute(elsePart,env)
-      }
-      case GreaterThan(n1, n2) => makeVal(openInt(execute(n1, env)) > openInt(execute(n2,env)))
-      case LesserThan(n1, n2) => makeVal(openInt(execute(n1, env)) < openInt(execute(n2,env)))
-      case Equal(n1, n2) => makeVal(openInt(execute(n1, env)) == openInt(execute(n2,env)))
-      //case Fun(id, tp, param, tb, body) => (x : ValL) => execute(body, aEnv(param.s, x, env))
-      //case Apply(id, arg) => execute(id, env).asInstanceOf[Any => ValL](execute(arg, env))
-      case Fun(id, tp, param, tb, body) => ValFun(param.s, body, env)
-      case Apply(e, arg) => {
-        execute(e, env) match {
-          case ValFun(par, body, env1) => execute(body, aEnv(par, execute(arg,env), env1))
-          case _ => {println("Error, expected ValFun"); sys.exit()}
-        }
-      }
-      case With(id, tv, value, tb, b) => execute(b, aEnv(id.s, execute(value, env), env))
-      case Id(s) => makeVal(env_lookup(env, s))
-      case _ => makeVal(expr)
-    }
-  }
-
-  def makeVal(sv: Any) : ValL = {
-    sv match {
-      case n: Int => ValInt(n)
-      case b: Boolean => ValBool(b)
-      case v: ValL => v
-    }
-  }
-
-  def openInt(v: ValL) : Int = {
-     v match {
-      case ValInt(n) => n
-      case _ => {println("Compile error"); sys.exit()}
-    }
-  }
-
-  def openBool(v: ValL) : Boolean = {
-    v match {
-      case ValBool(b) => b
-      case _ => {println("Compile error"); sys.exit()}
-    }
-  }
-
+object TypeChecker {
   def check_type(expr: Expr, env: Env = EmptyEnv()) : Type = {
     expr match {
       case Num(n) => TNum()
@@ -72,8 +14,8 @@ object Parser {
         val e = check_type(elsePart, env)
         c match {
           case TBool() => if (t != e) {
-              println(s"Type error, $t is not equal to $e")
-              TError()
+            println(s"Type error, $t is not equal to $e")
+            TError()
             }
             else {
               t
@@ -106,7 +48,7 @@ object Parser {
       case Apply(id, arg) => check_type(id, env) match {
         case TFun(tpar, tbody) => {
           val targr = check_type(arg, env)
-          if (targr == tbody) tbody
+          if (targr == tpar) tbody
           else {println(s"Expected an argument with type $tpar, found $targr");TError()}
         }
         case _ => {println(s"Expected function, found $expr"); TError()}
@@ -144,10 +86,4 @@ object Parser {
       }
     }
   }
-
-  //def executeFun(expr: Expr): Env = {
-  //  case Fun(id, parameter, body) => aEnv(id, body, env)
-  //}
-
-  //def replace(arg: Expr, id)
 }

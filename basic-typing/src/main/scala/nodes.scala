@@ -20,7 +20,7 @@ case class Equal(n1: Expr, n2: Expr) extends Expr
 case class Id(s: Symbol) extends Expr
 case class IfExpr(condPart: Expr, thenPart: Expr, elsePart: Expr) extends Expr
 case class Fun(id: Id, tpar : Type, parameter: Id, tbody : Type, body: Expr) extends Expr
-case class Apply(id: Id, arg: Expr) extends Expr
+case class Apply(e: Expr, arg: Expr) extends Expr
 case class With(id: Id, tv : Type, value: Expr,tb : Type, b:  Expr) extends Expr
 
 
