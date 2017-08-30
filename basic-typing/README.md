@@ -7,3 +7,4 @@
 - [x] Poner en repositorio
 - [ ] Refactoring, separar responsabilidades por clases
 - [ ] Hacer unit test
+- [ ] Implementar parsing de s-expr
