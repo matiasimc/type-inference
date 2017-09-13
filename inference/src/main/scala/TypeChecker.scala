@@ -6,7 +6,7 @@ object TypeChecker {
 
   var freshIndex = 0
 
-  def getFreshVar() : TVar = {
+  def getFreshVar : TVar = {
     freshIndex += 1
     TVar(freshIndex-1)
   }
@@ -31,7 +31,7 @@ object TypeChecker {
       case Mul(n1, n2) => check_AE_type(n1, n2, env)
       case Fun(id, tpar, parameter, body) => {
         val trb = check_type(body, aEnv(parameter.s, tpar, env))
-        val tv = getFreshVar()
+        val tv = getFreshVar
         val cs = aConstraintSet(Constraint(tv, trb.t), trb.cs)
         TypeRelation(TFun(tpar, tv), cs)
       }
@@ -42,7 +42,7 @@ object TypeChecker {
       case Apply(id, arg) => {
         val trid = check_type(id, env)
         val trarg = check_type(arg, env)
-        val tv = getFreshVar()
+        val tv = getFreshVar
         val cs = ConstraintSet.union(trid.cs, trarg.cs, ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))))
         TypeRelation(tv, cs)
       }
@@ -50,76 +50,82 @@ object TypeChecker {
   }
 
   /*
-  Reemplazo todos los t1 por t2
+  Substituyo todas las ocurrencias de t1 por t2
    */
-  private def subst(t1: Type, t2: Type, cs: ConstraintSet) : ConstraintSet = {
+  private def substitute(t1: Type, t2: Type, cs: ConstraintSet) : ConstraintSet = {
     cs match {
+      case aConstraintSet(c, cs1) => c match {
+        case Constraint(tc1, tc2) =>
+          if (tc1 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, tc2)), substitute(t1, t2, cs1))
+          else if (tc2 == t1) ConstraintSet.union(ConstraintSet(Constraint(tc1, t2)), substitute(t1, t2, cs1))
+          else ConstraintSet.union(ConstraintSet(c), substitute(t1, t2, cs1))
+      }
       case EmptyConstraintSet() => EmptyConstraintSet()
-      case aConstraintSet(c, cs1) => if (t1 == c.t1) aConstraintSet(Constraint(t2, c.t2), subst(t1, t2, cs1))
-      else if (t1 == c.t2) aConstraintSet(Constraint(c.t1, t2), subst(t1, t2, cs1))
-      else aConstraintSet(c, subst(t1, t2, cs1))
     }
   }
 
-  /*
-  Reemplazo las ocurrencias de t1 por t2, en el tipo t
-   */
-  private def substType(t1: Type, t2: Type, t: Type) : Type = {
-    t match {
-      case TFun(targ, tbody) => {
-        if (targ == t1) TFun(t2, substType(t1, t2, tbody))
-        else if (tbody == t1) TFun(substType(t1, t2, targ), t2)
-        else TFun(substType(t1, t2, targ), substType(t1, t2, tbody))
-      }
-      case TVar(i) => {
-        if (t1 == t) t2
-        else t
-      }
-      case _ => t
+  def queryType(tv: Type, subst: Substitution, found : Type = TError()) : Type = {
+    subst match {
+      case ComplexSubstitution(s1, s2) =>
+        queryType(tv, s1, queryType(tv, s2))
+      case EmptySubstitution() => found
+      case SimpleSubstitution(t1, t2) =>
+        if (tv == t1) t2
+        else found
     }
   }
 
-  /*
-  Reemplazo las type variable resueltas en un constraint set en un type
-   */
-  def resolveType(cs : ConstraintSet, t: Type) : Type = {
+  def substituteInConstraintSet(t1: Type, t2: Type, cs: ConstraintSet) : ConstraintSet = {
     cs match {
-      case aConstraintSet(c, cs1) =>
-        c.t1 match {
-          case TVar(i) => resolveType(cs1, substType(c.t1, c.t2, t))
-          case _ => resolveType(cs1, t)
+      case aConstraintSet(c, cs1) => c match {
+        case Constraint(t3, t4) => (t3, t4) match {
+          case (TFun(ta1, tb1), TFun(ta2, tb2)) =>
+            if (t1 == ta1) ConstraintSet.union(ConstraintSet(Constraint(TFun(t2, tb1), t4)), substituteInConstraintSet(t1, t2, cs1))
+            else if (t1 == tb1) ConstraintSet.union(ConstraintSet(Constraint(TFun(ta1, t2), t4)), substituteInConstraintSet(t1, t2, cs1))
+            else if (t1 == ta2) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(t2, tb2))), substituteInConstraintSet(t1, t2, cs1))
+            else if (t1 == tb2) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(ta2, t2))), substituteInConstraintSet(t1, t2, cs1))
+            else if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
+            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
+          case (TFun(ta, tb), _) =>
+            if (t1 == ta) ConstraintSet.union(ConstraintSet(Constraint(TFun(t2, tb), t4)), substituteInConstraintSet(t1, t2, cs1))
+            else if (t1 == tb) ConstraintSet.union(ConstraintSet(Constraint(TFun(ta, t2), t4)), substituteInConstraintSet(t1, t2, cs1))
+            else if (t4 == t1) ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
+            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
+          case (_, TFun(ta, tb)) =>
+            if (t1 == ta) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(t2, tb))), substituteInConstraintSet(t1, t2, cs1))
+            else if (t1 == tb) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(ta, t2))), substituteInConstraintSet(t1, t2, cs1))
+            else if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
+            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
+          case (_,_) =>
+            if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
+            else if (t4 == t1) ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
+            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
         }
-      case EmptyConstraintSet() => t
+      }
+      case EmptyConstraintSet() => EmptyConstraintSet()
     }
   }
 
-  def unify(cs: ConstraintSet) : ConstraintSet = {
+  def unify(cs: ConstraintSet) : Substitution = {
     cs match {
       case aConstraintSet(c, cs1) =>
         c match {
           case Constraint(t1, t2) => t1 match {
-            case TVar(i) => aConstraintSet(Constraint(t1, t2), unify(subst(t1, t2, cs1)))
+            case TVar(i) => t2 match {
+              case _ => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
+            }
             case TFun(t3, t4) => t2 match {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
-              case _ => println("Error in unify 1"); sys.exit()
+              case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
             }
             case _ => t2 match {
-              case TVar(i) => aConstraintSet(Constraint(t2, t1), unify(subst(t2, t1, cs1)))
-              case _ => if (t1 == t2) aConstraintSet(c, unify(cs1)) else {println("Error in unify 2");sys.exit()}
+              case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
+              case _ => if (t1 == t2) unify(substituteInConstraintSet(t1,t2,cs1)) else {println("Error in unify 2");sys.exit()}
             }
           }
         }
-      case EmptyConstraintSet() => cs
+      case EmptyConstraintSet() => EmptySubstitution()
     }
-  }
-
-  /*
-  TODO La unificacion no funciona adecuadamente, por lo que se hizo un "parche" haciendo que el type of haga varias pasadas por las constraints hasta que se resuelva
-   */
-
-  def type_of(expr: Expr) : Type = {
-    val tr = check_type(expr)
-    resolveType(unify(unify(unify(unify(unify(tr.cs))))), tr.t)
   }
 
 

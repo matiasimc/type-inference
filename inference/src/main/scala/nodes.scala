@@ -53,6 +53,12 @@ object ConstraintSet {
 
 case class TypeRelation(t: Type, cs: ConstraintSet)
 
+trait Substitution
+
+case class EmptySubstitution() extends Substitution
+case class SimpleSubstitution(t1: Type, t2: Type) extends Substitution
+case class ComplexSubstitution(s1: Substitution, s2: Substitution) extends Substitution
+
 trait ValL
 case class ValInt(n: Int) extends ValL
 case class ValBool(b: Boolean) extends ValL
