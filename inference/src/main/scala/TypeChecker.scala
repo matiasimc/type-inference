@@ -64,14 +64,24 @@ object TypeChecker {
     }
   }
 
+  private def search_until_not_tfun(in : Type, looking_for : Type, newType : Type) : Type = {
+    in match {
+      case TFun(targ, tbody) =>
+        if (targ == looking_for) TFun(newType, tbody)
+        else if (tbody == looking_for) TFun(targ, newType)
+        else TFun(search_until_not_tfun(targ, looking_for, newType), search_until_not_tfun(tbody, looking_for, newType))
+      case _ =>
+        if (in == looking_for) newType
+        else in
+    }
+  }
+
   def queryType(tv: Type, subst: Substitution, found : Type = TError()) : Type = {
     subst match {
       case ComplexSubstitution(s1, s2) =>
-        queryType(tv, s1, queryType(tv, s2))
+        queryType(queryType(tv, s2), s1, queryType(tv, s2))
       case EmptySubstitution() => found
-      case SimpleSubstitution(t1, t2) =>
-        if (tv == t1) t2
-        else found
+      case SimpleSubstitution(t1, t2) => search_until_not_tfun(tv, t1, t2)
     }
   }
 
@@ -143,6 +153,15 @@ object TypeChecker {
     val cs1 = tr1.cs
     val cs2 = tr2.cs
     TypeRelation(TNum(), ConstraintSet.union(ConstraintSet(Constraint(tr1.t, TNum()), Constraint(tr2.t, TNum())), cs1, cs2))
+  }
+
+  def typeof(expr: Expr) : Type = {
+    val type_and_constraints = TypeChecker.check_type(expr)
+    println(type_and_constraints)
+    val constraints_unified = TypeChecker.unify(type_and_constraints.cs)
+    println(constraints_unified)
+    val type_resolved = TypeChecker.queryType(type_and_constraints.t, constraints_unified)
+    type_resolved
   }
 
   def env_lookup (env : Env, s : Symbol) : Any = {
