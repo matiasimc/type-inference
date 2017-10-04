@@ -49,6 +49,7 @@ object TypeChecker {
       case GetFromRecord(e, s) =>
         check_type(e, env) match {
           case TRecord(l : List[TRecPair]) => l.filter((trp: TRecPair) => trp.s == s).head.t
+          case a @ _ => {println(s"Expected record, found $a"); TError()}
         }
       case Apply(id, arg) => check_type(id, env) match {
         case TFun(tpar, tbody) => {
