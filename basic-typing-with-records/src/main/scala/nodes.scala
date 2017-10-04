@@ -36,7 +36,7 @@ trait ValL
 case class ValInt(n: Int) extends ValL
 case class ValBool(b: Boolean) extends ValL
 case class ValFun(par: Symbol, body: Expr, env: Env) extends ValL
-case class RecValPair(s: Symbol, v: ValL) extends ValL
+case class RecValPair(s: Symbol, v: ValL) 
 case class ValRecord(f: List[RecValPair]) extends ValL
 
 // Hacer que el execute retorne runtime value (ValL, ValBool, ValInt)
