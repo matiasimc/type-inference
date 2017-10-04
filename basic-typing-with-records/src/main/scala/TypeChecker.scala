@@ -45,10 +45,11 @@ object TypeChecker {
         else if (tb != tbr) {println(s"Expected a expression with type $tb, not $tbr"); TError()}
         else tb
       }
-      case Record(recPairs) => TRecord(recPairs.map((rp : RecPair) => rp.t))
-      case GetFromRecord(r, s) =>
-        val rp = r.f.filter((rp : RecPair) => rp.s == s).head
-        return check_type(rp.e, env)
+      case Record(recPairs) => TRecord(recPairs.map((rp : RecPair) => TRecPair(rp.s, rp.t)))
+      case GetFromRecord(e, s) =>
+        check_type(e, env) match {
+          case TRecord(l : List[TRecPair]) => l.filter((trp: TRecPair) => trp.s == s).head.t
+        }
       case Apply(id, arg) => check_type(id, env) match {
         case TFun(tpar, tbody) => {
           val targr = check_type(arg, env)

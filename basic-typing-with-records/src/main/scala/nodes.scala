@@ -6,7 +6,8 @@ trait Type
 case class TNum() extends Type
 case class TBool() extends Type
 case class TFun(targ : Type, tbody : Type) extends Type
-case class TRecord(tfields : List[Type]) extends Type
+case class TRecord(tfields : List[TRecPair]) extends Type
+case class TRecPair(s: Symbol, t: Type)
 case class TError() extends Type
 
 trait Expr
@@ -25,7 +26,7 @@ case class Apply(e: Expr, arg: Expr) extends Expr
 case class With(id: Id, tv : Type, value: Expr,tb : Type, b:  Expr) extends Expr
 case class Record(f: List[RecPair]) extends Expr
 case class RecPair(s: Symbol, t: Type, e: Expr)
-case class GetFromRecord(r: Record, s: Symbol) extends Expr
+case class GetFromRecord(e: Expr, s: Symbol) extends Expr
 
 trait Env
 case class EmptyEnv() extends Env

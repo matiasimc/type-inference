@@ -29,9 +29,11 @@ object Runner {
       }
       case With(id, tv, value, tb, b) => execute(b, aEnv(id.s, execute(value, env), env))
       case Record(fields) => ValRecord(fields.map((f : RecPair) => RecValPair(f.s, execute(f.e, env))))
-      case GetFromRecord(r,s) =>
-        val rp = r.f.filter((rp : RecPair) => rp.s == s).head
-        execute(rp.e, env)
+      case GetFromRecord(e,s) =>
+        execute(e, env) match {
+          case ValRecord(l : List[RecValPair]) => l.filter((rvp: RecValPair) => rvp.s == s).head.v
+          case _ => {println("Error, expected ValRecord"); sys.exit()}
+        }
       case Id(s) => makeVal(env_lookup(env, s))
       case _ => makeVal(expr)
     }

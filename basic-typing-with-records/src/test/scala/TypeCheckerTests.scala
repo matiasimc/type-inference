@@ -41,6 +41,15 @@ class RecordTypeCheckTest extends FlatSpec with Matchers {
   val expr2 = Record(List(RecPair('foo, TFun(TNum(), TNum()), Fun(Id('fun),TNum(),Id('x),TNum(),Add(Num(4), Id('x)))),
     RecPair('bar, TNum(), Num(4))))
   s"The type of the expression $expr2" should "return TRecord(List(TFun(TNum(), TNum()), TNum()))" in {
-    assert (TypeChecker.check_type(expr2) == TRecord(List(TFun(TNum(), TNum()), TNum())))
+    assert (TypeChecker.check_type(expr2) == TRecord(List(TRecPair('foo, TFun(TNum(), TNum())), TRecPair('bar,TNum()))))
+  }
+  val expr3 = Record(List(RecPair('foo, TRecord(List(TRecPair('bar, TNum()))), Record(List(RecPair('bar, TNum(), Num(4)))))))
+  s"The type of the expression $expr3" should "return TRecord(List(TRecord(List(TNum()))))" in {
+    assert(TypeChecker.check_type(expr3) == TRecord(List(TRecPair('foo, TRecord(List(TRecPair('bar, TNum())))))))
+  }
+
+  val expr4 = With(Id('r), TRecord(List(TRecPair('foo, TNum()))), Record(List(RecPair('foo, TNum(), Num(4)))), TNum(), Mul(GetFromRecord(Id('r), 'foo), Num(3)))
+  s"The type of the expression $expr4" should "return TNum()" in {
+    assert(TypeChecker.check_type(expr4) == TNum())
   }
 }

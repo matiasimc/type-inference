@@ -14,4 +14,8 @@ class RecordTest extends FlatSpec with Matchers {
   s"The evaluation of the expression $expr2" should "return ValRecord(List(RecValPair('foo,ValFun('x,Add(Num(4),Id('x)),EmptyEnv())), RecValPair('bar,ValInt(4))))" in {
     assert(Runner.execute(expr2) == ValRecord(List(RecValPair('foo,ValFun('x,Add(Num(4),Id('x)),EmptyEnv())), RecValPair('bar,ValInt(4)))))
   }
+  val expr3 = With(Id('r), TRecord(List(TRecPair('foo, TNum()))), Record(List(RecPair('foo, TNum(), Num(4)))), TNum(), Mul(GetFromRecord(Id('r), 'foo), Num(3)))
+  s"The evaluation of the expression $expr3" should "return ValInt(12)" in {
+    assert(Runner.execute(expr3) == ValInt(12))
+  }
 }
