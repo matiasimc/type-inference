@@ -8,7 +8,7 @@ case class TBool() extends Type
 case class TVar(index: Int) extends Type
 case class TFun(targ : Type, tbody : Type) extends Type
 case class TRecord(tfields : List[TRecPair]) extends Type
-case class TRecPair(id: Symbol, t: Type)
+case class TRecPair(id: Symbol, t: Type) extends Type
 case class TError() extends Type
 
 trait Expr

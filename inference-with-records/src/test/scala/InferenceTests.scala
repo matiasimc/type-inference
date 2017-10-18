@@ -41,4 +41,9 @@ class InferenceRecordTest extends FlatSpec with Matchers {
   s"The type of the expression $exp3" should "return TNum()" in {
     assert(TypeChecker.typeof(exp3) == TNum())
   }
+
+  val exp4 = GetFromRecord(Record(List(RecPair('a, GetFromRecord(Record(List(RecPair('b, Num(4)))), 'b)))), 'a)
+  s"The type of the expression $exp4" should "return TNum()" in {
+    assert(TypeChecker.typeof(exp4) == TNum())
+  }
 }

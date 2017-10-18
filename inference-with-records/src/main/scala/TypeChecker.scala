@@ -59,12 +59,11 @@ object TypeChecker {
         val csRet = ConstraintSet.union((constraints :+ cs):_*)
         TypeRelation(TRecord(lrp), csRet)
       }
-      /*case GetFromRecord(e, s) =>
+      case GetFromRecord(e, s) =>
         val tr = check_type(e, env)
         val v = getFreshVar
-        val cs = ConstraintSet.union(tr.cs, ConstraintSet(Constraint(tr.t, TRecord(List(TRecPair(s, v))))))
+        val cs = ConstraintSet.union(tr.cs, ConstraintSet(Constraint(tr.t, TRecPair(s, v))))
         TypeRelation(v, cs)
-     */
     }
   }
 
@@ -145,12 +144,19 @@ object TypeChecker {
       case aConstraintSet(c, cs1) =>
         c match {
           case Constraint(t1, t2) => t1 match {
-            case TVar(i) => t2 match {
-              case _ => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
-            }
+            case TVar(i) =>
+               ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
             case TFun(t3, t4) => t2 match {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
+            }
+            case TRecord(fields) => t2 match {
+              case TRecPair(s, t) => {
+                val found = fields.filter((trp: TRecPair) => trp.id == s)
+                if (found.length > 0) unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t, found.head.t))))
+                else {println(s"Error, field $s not found in record");sys.exit()}
+              }
+              case _ => unify(cs1)
             }
             case _ => t2 match {
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
@@ -183,7 +189,7 @@ object TypeChecker {
     val type_and_constraints = TypeChecker.check_type(expr)
     val constraints_unified = TypeChecker.unify(type_and_constraints.cs)
     //println(type_and_constraints)
-    println(constraints_unified)
+    //println(constraints_unified)
     val type_resolved = TypeChecker.queryType(type_and_constraints.t, constraints_unified)
     type_resolved
   }
