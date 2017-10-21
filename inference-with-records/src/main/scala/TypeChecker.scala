@@ -29,15 +29,16 @@ object TypeChecker {
       case Add(n1, n2) => check_AE_type(n1, n2, env)
       case Subst(n1, n2) => check_AE_type(n1, n2, env)
       case Mul(n1, n2) => check_AE_type(n1, n2, env)
-      case Fun(id, tpar, parameter, body) => {
-        val trb = check_type(body, aEnv(parameter.s, tpar, env))
+      case Fun(id, parameter, body) => {
+        val tpar = check_type(parameter, env)
+        val trb = check_type(body, aEnv(parameter.s, tpar.t, env))
         val tv = getFreshVar
-        val cs = aConstraintSet(Constraint(tv, trb.t), trb.cs)
-        TypeRelation(TFun(tpar, tv), cs)
+        val cs = aConstraintSet(Constraint(tv, trb.t), ConstraintSet.union(trb.cs, tpar.cs))
+        TypeRelation(TFun(tpar.t, tv), cs)
       }
-      case With(id, tv, value, body) => {
-        val trb = check_type(body, aEnv(id.s, tv, env))
-        trb
+      case With(id, value, body) => {
+        val nexp = Apply(Fun(Id('with), id, body), value)
+        check_type(nexp, env)
       }
       case Apply(id, arg) => {
         val trid = check_type(id, env)
@@ -56,7 +57,7 @@ object TypeChecker {
           constraints = constraints :+ t.cs
           Constraint(v,t.t)
         }):_*)
-        val csRet = ConstraintSet.union((constraints :+ cs):_*)
+        val csRet = ConstraintSet.union(constraints :+ cs:_*)
         TypeRelation(TRecord(lrp), csRet)
       }
       case GetFromRecord(e, s) =>
@@ -201,8 +202,7 @@ object TypeChecker {
         else env_lookup(e, s)
       }
       case EmptyEnv() => {
-        println(s"Variable $s not found")
-        sys.exit()
+        getFreshVar
       }
     }
   }
