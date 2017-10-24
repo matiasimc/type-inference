@@ -26,10 +26,17 @@ class InferenceFunBasicTest extends FlatSpec with Matchers {
   }
 }
 
-class InferenceFunComplexTest extends FlatSpec with Matchers {
+class InferenceFunComplexTest1 extends FlatSpec with Matchers {
   val exp2 = Fun(Id('foo), Id('x), Fun(Id('bar), Id('y), Mul(Id('x), Id('y))))
   s"The type of the expression $exp2" should "return TFun(TNum(), TFun(TNum(), TNum()))" in {
     assert(TypeChecker.typeof(exp2) == TFun(TNum(), TFun(TNum(), TNum())))
+  }
+}
+
+class InferenceFunComplexTest2 extends FlatSpec with Matchers {
+  val exp2 = With(Id('a), Mul(Num(2), Apply(Id('foo), Bool(true))), Id('foo))
+  s"The type of the expression $exp2" should "return TFun(TBool(), TNum())" in {
+    assert(TypeChecker.typeof(exp2) == TFun(TBool(), TNum()))
   }
 }
 

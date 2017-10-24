@@ -56,7 +56,7 @@ object ConstraintSet {
 
 }
 
-case class TypeRelation(t: Type, cs: ConstraintSet)
+case class TypeRelation(t: Type, cs: ConstraintSet, env: Env)
 
 trait Substitution
 

@@ -14,14 +14,20 @@ object TypeChecker {
 
   def check_type(expr: Expr, env: Env = EmptyEnv()) : TypeRelation = {
     expr match {
-      case Num(n) => TypeRelation(TNum(), EmptyConstraintSet())
-      case Bool(b) => TypeRelation(TBool(), EmptyConstraintSet())
-      case Id(x) => TypeRelation(env_lookup(env, x).asInstanceOf[Type], EmptyConstraintSet())
+      case Num(n) => TypeRelation(TNum(), EmptyConstraintSet(), env)
+      case Bool(b) => TypeRelation(TBool(), EmptyConstraintSet(), env)
+      case Id(x) => {
+        val t = env_lookup(env, x).asInstanceOf[Type]
+        t match {
+          case TVar(i) => TypeRelation(t, EmptyConstraintSet(), aEnv(x, TVar(i), env))
+          case _ => TypeRelation(t, EmptyConstraintSet(), env)
+        }
+      }
       case IfExpr(condPart, thenPart, elsePart) => {
         val c = check_type(condPart, env)
         val t = check_type(thenPart, env)
         val e = check_type(elsePart, env)
-        TypeRelation(t.t, ConstraintSet.union(ConstraintSet(Constraint(t.t, e.t), Constraint(c.t, TBool())), t.cs))
+        TypeRelation(t.t, ConstraintSet.union(ConstraintSet(Constraint(t.t, e.t), Constraint(c.t, TBool())), t.cs), env)
       }
       case LesserThan(n1, n2) => check_Bool_type(n1, n2, env)
       case GreaterThan(n1, n2) => check_Bool_type(n1, n2, env)
@@ -30,11 +36,11 @@ object TypeChecker {
       case Subst(n1, n2) => check_AE_type(n1, n2, env)
       case Mul(n1, n2) => check_AE_type(n1, n2, env)
       case Fun(id, parameter, body) => {
-        val tpar = check_type(parameter, env)
-        val trb = check_type(body, aEnv(parameter.s, tpar.t, env))
+        val tpar = getFreshVar
+        val trb = check_type(body, aEnv(parameter.s, tpar, env))
         val tv = getFreshVar
-        val cs = aConstraintSet(Constraint(tv, trb.t), ConstraintSet.union(trb.cs, tpar.cs))
-        TypeRelation(TFun(tpar.t, tv), cs)
+        val cs = aConstraintSet(Constraint(tv, trb.t), trb.cs)
+        TypeRelation(TFun(tpar, tv), cs, trb.env)
       }
       case With(id, value, body) => {
         val nexp = Apply(Fun(Id('with), id, body), value)
@@ -42,10 +48,10 @@ object TypeChecker {
       }
       case Apply(id, arg) => {
         val trid = check_type(id, env)
-        val trarg = check_type(arg, env)
+        val trarg = check_type(arg, trid.env)
         val tv = getFreshVar
         val cs = ConstraintSet.union(trid.cs, trarg.cs, ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))))
-        TypeRelation(tv, cs)
+        TypeRelation(tv, cs, trarg.env)
       }
       case Record(fields) => {
         var lrp = List[TRecPair]()
@@ -58,13 +64,20 @@ object TypeChecker {
           Constraint(v,t.t)
         }):_*)
         val csRet = ConstraintSet.union(constraints :+ cs:_*)
-        TypeRelation(TRecord(lrp), csRet)
+        TypeRelation(TRecord(lrp), csRet, env)
       }
       case GetFromRecord(e, s) =>
         val tr = check_type(e, env)
-        val v = getFreshVar
-        val cs = ConstraintSet.union(tr.cs, ConstraintSet(Constraint(tr.t, TRecPair(s, v))))
-        TypeRelation(v, cs)
+        tr.t match {
+          case TRecord(fields) =>
+            val found = fields.filter((trp : TRecPair) => trp.id == s)
+            if (found.length > 0) TypeRelation(found.head.t, tr.cs, tr.env)
+            else {println(s"Field $s not found.");sys.exit()}
+          case _ =>
+            val tfield = getFreshVar
+            val cs = ConstraintSet.union(tr.cs, ConstraintSet(Constraint(tr.t, TRecord(List(TRecPair(s, tfield))))))
+            TypeRelation(tfield, cs, tr.env)
+        }
     }
   }
 
@@ -140,6 +153,10 @@ object TypeChecker {
     }
   }
 
+  def mixRecords(t1: TRecord, t2: TRecord) : TRecord = {
+    TRecord(t1.tfields++t2.tfields)
+  }
+
   def unify(cs: ConstraintSet) : Substitution = {
     cs match {
       case aConstraintSet(c, cs1) =>
@@ -151,13 +168,15 @@ object TypeChecker {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
             }
-            case TRecord(fields) => t2 match {
-              case TRecPair(s, t) => {
-                val found = fields.filter((trp: TRecPair) => trp.id == s)
-                if (found.length > 0) unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t, found.head.t))))
-                else {println(s"Error, field $s not found in record");sys.exit()}
-              }
-              case _ => unify(cs1)
+            case r1 @ TRecord(fields)  => t2 match {
+              case r2 @ TRecord(fields) => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
+                //if (r1 == r2) unify(cs1)
+                //else {
+                //  val newRecord = mixRecords(r1, r2)
+                //  unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t1, newRecord), Constraint(t2, newRecord))))
+                //  ComplexSubstitution(unify(substituteInConstraintSet(newRecord, t1, cs1)), SimpleSubstitution(t1, newRecord))
+                //}
+              case _ => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
             }
             case _ => t2 match {
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
@@ -172,25 +191,25 @@ object TypeChecker {
 
   def check_Bool_type(n1: Expr, n2: Expr, env: Env) : TypeRelation = {
       val tr1 = check_type(n1, env)
-      val tr2 = check_type(n2, env)
+      val tr2 = check_type(n2, tr1.env)
       val cs1 = tr1.cs
       val cs2 = tr2.cs
-      TypeRelation(TBool(), ConstraintSet.union(ConstraintSet(Constraint(tr1.t, TNum()), Constraint(tr2.t, TNum())), cs1, cs2))
+      TypeRelation(TBool(), ConstraintSet.union(ConstraintSet(Constraint(tr1.t, TNum()), Constraint(tr2.t, TNum())), cs1, cs2), tr2.env)
   }
 
   def check_AE_type(n1: Expr, n2: Expr, env: Env) : TypeRelation = {
     val tr1 = check_type(n1, env)
-    val tr2 = check_type(n2, env)
+    val tr2 = check_type(n2, tr1.env)
     val cs1 = tr1.cs
     val cs2 = tr2.cs
-    TypeRelation(TNum(), ConstraintSet.union(ConstraintSet(Constraint(tr1.t, TNum()), Constraint(tr2.t, TNum())), cs1, cs2))
+    TypeRelation(TNum(), ConstraintSet.union(ConstraintSet(Constraint(tr1.t, TNum()), Constraint(tr2.t, TNum())), cs1, cs2), tr2.env)
   }
 
   def typeof(expr: Expr) : Type = {
     val type_and_constraints = TypeChecker.check_type(expr)
     val constraints_unified = TypeChecker.unify(type_and_constraints.cs)
-    //println(type_and_constraints)
-    //println(constraints_unified)
+    println(type_and_constraints)
+    println(constraints_unified)
     val type_resolved = TypeChecker.queryType(type_and_constraints.t, constraints_unified)
     type_resolved
   }
