@@ -18,10 +18,7 @@ object TypeChecker {
       case Bool(b) => TypeRelation(TBool(), EmptyConstraintSet(), env)
       case Id(x) => {
         val t = env_lookup(env, x).asInstanceOf[Type]
-        t match {
-          case TVar(i) => TypeRelation(t, EmptyConstraintSet(), aEnv(x, TVar(i), env))
-          case _ => TypeRelation(t, EmptyConstraintSet(), env)
-        }
+        TypeRelation(t, EmptyConstraintSet(), aEnv(x, t, env))
       }
       case IfExpr(condPart, thenPart, elsePart) => {
         val c = check_type(condPart, env)
@@ -35,22 +32,21 @@ object TypeChecker {
       case Add(n1, n2) => check_AE_type(n1, n2, env)
       case Subst(n1, n2) => check_AE_type(n1, n2, env)
       case Mul(n1, n2) => check_AE_type(n1, n2, env)
-      case Fun(id, parameter, body) => {
-        val tpar = getFreshVar
+      case Fun(tpar, parameter, body) => {
         val trb = check_type(body, aEnv(parameter.s, tpar, env))
         val tv = getFreshVar
         val cs = aConstraintSet(Constraint(tv, trb.t), trb.cs)
         TypeRelation(TFun(tpar, tv), cs, trb.env)
       }
-      case With(id, value, body) => {
-        val nexp = Apply(Fun(Id('with), id, body), value)
+      case With(id, tv, value, body) => {
+        val nexp = Apply(Fun(tv, id, body), value)
         check_type(nexp, env)
       }
       case Apply(id, arg) => {
         val trid = check_type(id, env)
         val trarg = check_type(arg, trid.env)
         val tv = getFreshVar
-        val cs = ConstraintSet.union(trid.cs, trarg.cs, ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))))
+        val cs = ConstraintSet.union(trid.cs, ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))), trarg.cs)
         TypeRelation(tv, cs, trarg.env)
       }
       case Record(fields) => {
@@ -81,21 +77,6 @@ object TypeChecker {
     }
   }
 
-  /*
-  Substituyo todas las ocurrencias de t1 por t2
-   */
-  private def substitute(t1: Type, t2: Type, cs: ConstraintSet) : ConstraintSet = {
-    cs match {
-      case aConstraintSet(c, cs1) => c match {
-        case Constraint(tc1, tc2) =>
-          if (tc1 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, tc2)), substitute(t1, t2, cs1))
-          else if (tc2 == t1) ConstraintSet.union(ConstraintSet(Constraint(tc1, t2)), substitute(t1, t2, cs1))
-          else ConstraintSet.union(ConstraintSet(c), substitute(t1, t2, cs1))
-      }
-      case EmptyConstraintSet() => EmptyConstraintSet()
-    }
-  }
-
   private def search_rec(in : Type, looking_for : Type, newType : Type) : Type = {
     in match {
       case TFun(targ, tbody) =>
@@ -116,7 +97,7 @@ object TypeChecker {
   def queryType(tv: Type, subst: Substitution, found : Type = TError()) : Type = {
     subst match {
       case ComplexSubstitution(s1, s2) =>
-        queryType(queryType(tv, s2), s1, queryType(tv, s2))
+        queryType(queryType(tv, s2, found), s1, queryType(tv, s2, found))
       case EmptySubstitution() => found
       case SimpleSubstitution(t1, t2) => search_rec(tv, t1, t2)
     }
@@ -145,8 +126,13 @@ object TypeChecker {
             else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
           case (_,_) =>
             if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
-            else if (t4 == t1) ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
-            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
+            else if (t4 == t1) {
+              ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
+            }
+            else {
+
+              ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
+            }
         }
       }
       case EmptyConstraintSet() => EmptyConstraintSet()
@@ -162,20 +148,16 @@ object TypeChecker {
       case aConstraintSet(c, cs1) =>
         c match {
           case Constraint(t1, t2) => t1 match {
-            case TVar(i) =>
-               ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
+            case TVar(i) => t2 match {
+              case TRecord(fields) => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
+              case _ => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
+            }
             case TFun(t3, t4) => t2 match {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
             }
             case r1 @ TRecord(fields)  => t2 match {
               case r2 @ TRecord(fields) => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
-                //if (r1 == r2) unify(cs1)
-                //else {
-                //  val newRecord = mixRecords(r1, r2)
-                //  unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t1, newRecord), Constraint(t2, newRecord))))
-                //  ComplexSubstitution(unify(substituteInConstraintSet(newRecord, t1, cs1)), SimpleSubstitution(t1, newRecord))
-                //}
               case _ => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
             }
             case _ => t2 match {
@@ -221,7 +203,8 @@ object TypeChecker {
         else env_lookup(e, s)
       }
       case EmptyEnv() => {
-        getFreshVar
+        println(s"Variable $s not defined in scope")
+        sys.exit()
       }
     }
   }

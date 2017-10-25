@@ -20,15 +20,15 @@ object Runner {
       case Equal(n1, n2) => makeVal(openInt(execute(n1, env)) == openInt(execute(n2,env)))
       //case Fun(id, tp, param, tb, body) => (x : ValL) => execute(body, aEnv(param.s, x, env))
       //case Apply(id, arg) => execute(id, env).asInstanceOf[Any => ValL](execute(arg, env))
-      case Fun(id, param, body) => ValFun(param.s, body, env)
+      case Fun(tpar, param, body) => ValFun(param.s, body, env)
       case Apply(e, arg) => {
         execute(e, env) match {
           case ValFun(par, body, env1) => execute(body, aEnv(par, execute(arg,env), env1))
           case _ => {println("Error, expected ValFun"); sys.exit()}
         }
       }
-      case With(id, value, b) => {
-        val nexp = Apply(Fun(Id('with), id, b), value)
+      case With(id, tv, value, b) => {
+        val nexp = Apply(Fun(tv, id, b), value)
         execute(nexp, env)
         execute(b, aEnv(id.s, execute(value, env), env))
       }
