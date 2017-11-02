@@ -56,21 +56,21 @@ class InferenceRecordTest2 extends FlatSpec with Matchers {
 }
 
 class InferenceRecordTest3 extends FlatSpec with Matchers {
-  val exp3 = Apply(Fun(TypeChecker.getFreshVar, Id('x), Mul(GetFromRecord(Id('x), 'a), Num(2))), Record(List(RecPair('a, Num(5)))))
+  val exp3 = Apply(Fun(TypeChecker.getFreshVar, Id('x), Mul(RecordAccess(Id('x), 'a), Num(2))), Record(List(RecPair('a, Num(5)))))
   s"The type of the expression $exp3" should "return TNum()" in {
     assert(TypeChecker.typeof(exp3) == TNum())
   }
 }
 
 class InferenceRecordTest4 extends FlatSpec with Matchers {
-  val exp4 = GetFromRecord(Record(List(RecPair('a, GetFromRecord(Record(List(RecPair('b, Num(4)))), 'b)))), 'a)
+  val exp4 = RecordAccess(Record(List(RecPair('a, RecordAccess(Record(List(RecPair('b, Num(4)))), 'b)))), 'a)
   s"The type of the expression $exp4" should "return TNum()" in {
     assert(TypeChecker.typeof(exp4) == TNum())
   }
 }
 
 class InferenceRecordTest5 extends FlatSpec with Matchers {
-  val exp1 = With(Id('x), TypeChecker.getFreshVar, Mul(GetFromRecord(Id('r), 'a), Num(2)), With(Id('y),TypeChecker.getFreshVar ,Add(GetFromRecord(Id('r), 'b), Num(2)), Id('r)))
+  val exp1 = With(Id('x), TypeChecker.getFreshVar, Mul(RecordAccess(Id('r), 'a), Num(2)), With(Id('y),TypeChecker.getFreshVar ,Add(RecordAccess(Id('r), 'b), Num(2)), Id('r)))
   val exp = Fun(TypeChecker.getFreshVar, Id('r), exp1)
   s"The type of the expression $exp" should "return TFun(TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))))" in {
     assert(TypeChecker.typeof(exp) == TFun(TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum())))))

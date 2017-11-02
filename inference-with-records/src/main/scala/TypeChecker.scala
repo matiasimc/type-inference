@@ -62,18 +62,16 @@ object TypeChecker {
         val csRet = ConstraintSet.union(constraints :+ cs:_*)
         TypeRelation(TRecord(lrp), csRet, env)
       }
-      case GetFromRecord(e, s) =>
+      case RecordAccess(e, s) =>
         val tr = check_type(e, env)
-        tr.t match {
+        val alpha = getFreshVar
+        val tau = tr.t match {
           case TRecord(fields) =>
-            val found = fields.filter((trp : TRecPair) => trp.id == s)
-            if (found.length > 0) TypeRelation(found.head.t, tr.cs, tr.env)
-            else {println(s"Field $s not found.");sys.exit()}
-          case _ =>
-            val tfield = getFreshVar
-            val cs = ConstraintSet.union(tr.cs, ConstraintSet(Constraint(tr.t, TRecord(List(TRecPair(s, tfield))))))
-            TypeRelation(tfield, cs, tr.env)
+            TRecord(fields.map((trp : TRecPair) => if (trp.id == s) TRecPair(trp.id, alpha) else TRecPair(trp.id, getFreshVar)))
+          case _ => TRecord(List(TRecPair(s, alpha)))
         }
+        val cs = ConstraintSet.union(ConstraintSet(Constraint(tr.t, tau)), tr.cs)
+        TypeRelation(alpha, cs, tr.env)
     }
   }
 
@@ -156,8 +154,9 @@ object TypeChecker {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
             }
-            case r1 @ TRecord(fields)  => t2 match {
-              case r2 @ TRecord(fields) => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
+            case r1 @ TRecord(fields1)  => t2 match {
+              case r2 @ TRecord(fields2) => unify(ConstraintSet.union(cs1, ConstraintSet(fields1.zip(fields2).map(trpp => Constraint(trpp._1.t, trpp._2.t)):_*)))
+              //ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
               case _ => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
             }
             case _ => t2 match {

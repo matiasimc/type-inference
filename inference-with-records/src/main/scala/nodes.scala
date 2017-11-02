@@ -1,3 +1,4 @@
+
 /**
   * Created by mmeneses on 15-08-17.
   */
@@ -8,6 +9,7 @@ case class TBool() extends Type
 case class TVar(index: Int) extends Type
 case class TFun(targ : Type, tbody : Type) extends Type
 case class TRecord(tfields : List[TRecPair]) extends Type
+case class Inf()
 case class TRecPair(id: Symbol, t: Type) extends Type
 case class TError() extends Type
 
@@ -27,7 +29,7 @@ case class Apply(e: Expr, arg: Expr) extends Expr
 case class With(id: Id, tv : Type, value: Expr,b:  Expr) extends Expr
 case class Record(f: List[RecPair]) extends Expr
 case class RecPair(s: Symbol, e: Expr)
-case class GetFromRecord(e: Expr, s: Symbol) extends Expr
+case class RecordAccess(e: Expr, s: Symbol) extends Expr
 
 
 trait Env

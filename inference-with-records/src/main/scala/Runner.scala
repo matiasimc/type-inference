@@ -33,7 +33,7 @@ object Runner {
         execute(b, aEnv(id.s, execute(value, env), env))
       }
       case Record(fields) => ValRecord(fields.map((f : RecPair) => RecValPair(f.s, execute(f.e, env))))
-      case GetFromRecord(e,s) =>
+      case RecordAccess(e,s) =>
         execute(e, env) match {
           case ValRecord(l : List[RecValPair]) => l.filter((rvp: RecValPair) => rvp.s == s).head.v
           case _ => {println("Error, expected ValRecord"); sys.exit()}
