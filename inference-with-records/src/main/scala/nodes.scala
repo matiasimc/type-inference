@@ -8,9 +8,12 @@ case class TNum() extends Type
 case class TBool() extends Type
 case class TVar(index: Int) extends Type
 case class TFun(targ : Type, tbody : Type) extends Type
-case class TRecord(tfields : List[TRecPair]) extends Type
-case class Inf()
-case class TRecPair(id: Symbol, t: Type) extends Type
+case class TRecord(tfields: Set[TField]) extends Type
+case class TField(name: Symbol, t: Type)
+case class Pi(tfields : Set[FieldType], abs: Absent) extends Type
+case class FieldType(name: Symbol, fieldFlag : FlagVariable, t: Type)
+case class Absent(nfields : Int) extends Type
+case class FlagVariable(index: Int)
 case class TError() extends Type
 
 trait Expr
@@ -44,14 +47,14 @@ case class aConstraintSet(c: Constraint, cs: ConstraintSet) extends ConstraintSe
 
 object ConstraintSet {
   def apply(c: Constraint*) : ConstraintSet = {
-    c.foldLeft(EmptyConstraintSet(): ConstraintSet)((c1, c2) => aConstraintSet(c2, c1))
+    c.foldRight(EmptyConstraintSet(): ConstraintSet)((cr, cs) => aConstraintSet(cr, cs))
   }
 
   def union(cs: ConstraintSet*) : ConstraintSet = {
     cs.reduce(
       (cs1, cs2) => cs1 match {
         case EmptyConstraintSet() => cs2
-        case aConstraintSet(c, cs3) => aConstraintSet(c, union(cs2, cs3))
+        case aConstraintSet(c, cs3) => aConstraintSet(c, union(cs3, cs2))
       }
     )
   }

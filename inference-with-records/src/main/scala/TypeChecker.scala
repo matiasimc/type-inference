@@ -4,11 +4,25 @@
 
 object TypeChecker {
 
-  var freshIndex = 0
+  private var freshIndex = 0
 
   def getFreshVar : TVar = {
     freshIndex += 1
     TVar(freshIndex-1)
+  }
+
+  private var flagIndex = 0
+  private var flagMap = Map[Symbol, FlagVariable]()
+
+  private def getFlagVar(name: Symbol) : FlagVariable = {
+    flagMap.get(name) match {
+      case Some(x) => x
+      case None =>
+        flagIndex += 1
+        val flag = FlagVariable(flagIndex-1)
+        flagMap = flagMap + (name -> flag)
+        flag
+    }
   }
 
 
@@ -34,9 +48,10 @@ object TypeChecker {
       case Mul(n1, n2) => check_AE_type(n1, n2, env)
       case Fun(tpar, parameter, body) => {
         val trb = check_type(body, aEnv(parameter.s, tpar, env))
-        val tv = getFreshVar
-        val cs = aConstraintSet(Constraint(tv, trb.t), trb.cs)
-        TypeRelation(TFun(tpar, tv), cs, trb.env)
+        val tv1 = getFreshVar
+        val tv2 = getFreshVar
+        val cs = ConstraintSet.union(ConstraintSet(Constraint(tv2, TFun(tpar, tv1)), Constraint(tv1, trb.t)), trb.cs)
+        TypeRelation(tv2, cs, trb.env)
       }
       case With(id, tv, value, body) => {
         val nexp = Apply(Fun(tv, id, body), value)
@@ -46,29 +61,29 @@ object TypeChecker {
         val trid = check_type(id, env)
         val trarg = check_type(arg, trid.env)
         val tv = getFreshVar
-        val cs = ConstraintSet.union(trid.cs, ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))), trarg.cs)
+        val cs = ConstraintSet.union(ConstraintSet(Constraint(trid.t, TFun(trarg.t, tv))), trid.cs, trarg.cs)
         TypeRelation(tv, cs, trarg.env)
       }
       case Record(fields) => {
-        var lrp = List[TRecPair]()
+        var ft = Set[FieldType]()
         var constraints = List[ConstraintSet]()
         val cs = ConstraintSet(fields.map((rp: RecPair) => {
           val v = getFreshVar
           val t = check_type(rp.e, env)
-          lrp = lrp :+ TRecPair(rp.s, t.t)
+          ft = ft + FieldType(rp.s, getFlagVar(rp.s), t.t)
           constraints = constraints :+ t.cs
           Constraint(v,t.t)
         }):_*)
         val csRet = ConstraintSet.union(constraints :+ cs:_*)
-        TypeRelation(TRecord(lrp), csRet, env)
+        TypeRelation(Pi(ft, Absent(fields.length)), csRet, env)
       }
       case RecordAccess(e, s) =>
         val tr = check_type(e, env)
         val alpha = getFreshVar
         val tau = tr.t match {
-          case TRecord(fields) =>
-            TRecord(fields.map((trp : TRecPair) => if (trp.id == s) TRecPair(trp.id, alpha) else TRecPair(trp.id, getFreshVar)))
-          case _ => TRecord(List(TRecPair(s, alpha)))
+          case Pi(fields, abs) =>
+            Pi(fields.map((ft : FieldType) => if (ft.name == s) FieldType(ft.name,ft.fieldFlag ,alpha) else FieldType(ft.name, ft.fieldFlag, getFreshVar)), abs)
+          case _ => Pi(Set(FieldType(s, getFlagVar(s), alpha)), Absent(1))
         }
         val cs = ConstraintSet.union(ConstraintSet(Constraint(tr.t, tau)), tr.cs)
         TypeRelation(alpha, cs, tr.env)
@@ -77,68 +92,85 @@ object TypeChecker {
 
   private def search_rec(in : Type, looking_for : Type, newType : Type) : Type = {
     in match {
-      case TFun(targ, tbody) =>
-        if (targ == looking_for) TFun(newType, tbody)
-        else if (tbody == looking_for) TFun(targ, newType)
-        else TFun(search_rec(targ, looking_for, newType), search_rec(tbody, looking_for, newType))
-      case TRecord(fields) =>
-        TRecord(fields.map((trp: TRecPair) => {
-          if (trp.t == looking_for) TRecPair(trp.id, newType)
-          else TRecPair(trp.id, search_rec(trp.t, looking_for, newType))
-        }))
+      case TFun(targ, tbody) => TFun(search_rec(targ, looking_for, newType), search_rec(tbody, looking_for, newType))
+      case Pi(fields, abs) =>
+        Pi(fields.map((ft: FieldType) => {
+          if (ft.t == looking_for) FieldType(ft.name, ft.fieldFlag, newType)
+          else FieldType(ft.name, ft.fieldFlag, search_rec(ft.t, looking_for, newType))
+        }), abs)
       case _ =>
         if (in == looking_for) newType
         else in
     }
   }
 
-  def queryType(tv: Type, subst: Substitution, found : Type = TError()) : Type = {
+
+  def queryType(tv: Type, subst: Substitution) : Type = {
     subst match {
       case ComplexSubstitution(s1, s2) =>
-        queryType(queryType(tv, s2, found), s1, queryType(tv, s2, found))
-      case EmptySubstitution() => found
+        queryType(queryType(tv, s2), s1)
+        queryType(tv, s1)
+      case EmptySubstitution() => tv
       case SimpleSubstitution(t1, t2) => search_rec(tv, t1, t2)
     }
   }
 
-  def substituteInConstraintSet(t1: Type, t2: Type, cs: ConstraintSet) : ConstraintSet = {
-    cs match {
-      case aConstraintSet(c, cs1) => c match {
-        case Constraint(t3, t4) => (t3, t4) match {
-          case (TFun(ta1, tb1), TFun(ta2, tb2)) =>
-            if (t1 == ta1) ConstraintSet.union(ConstraintSet(Constraint(TFun(t2, tb1), t4)), substituteInConstraintSet(t1, t2, cs1))
-            else if (t1 == tb1) ConstraintSet.union(ConstraintSet(Constraint(TFun(ta1, t2), t4)), substituteInConstraintSet(t1, t2, cs1))
-            else if (t1 == ta2) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(t2, tb2))), substituteInConstraintSet(t1, t2, cs1))
-            else if (t1 == tb2) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(ta2, t2))), substituteInConstraintSet(t1, t2, cs1))
-            else if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
-            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
-          case (TFun(ta, tb), _) =>
-            if (t1 == ta) ConstraintSet.union(ConstraintSet(Constraint(TFun(t2, tb), t4)), substituteInConstraintSet(t1, t2, cs1))
-            else if (t1 == tb) ConstraintSet.union(ConstraintSet(Constraint(TFun(ta, t2), t4)), substituteInConstraintSet(t1, t2, cs1))
-            else if (t4 == t1) ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
-            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
-          case (_, TFun(ta, tb)) =>
-            if (t1 == ta) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(t2, tb))), substituteInConstraintSet(t1, t2, cs1))
-            else if (t1 == tb) ConstraintSet.union(ConstraintSet(Constraint(t3, TFun(ta, t2))), substituteInConstraintSet(t1, t2, cs1))
-            else if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
-            else ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
-          case (_,_) =>
-            if (t3 == t1) ConstraintSet.union(ConstraintSet(Constraint(t2, t4)), substituteInConstraintSet(t1,t2,cs1))
-            else if (t4 == t1) {
-              ConstraintSet.union(ConstraintSet(Constraint(t3, t2)), substituteInConstraintSet(t1,t2,cs1))
-            }
-            else {
+  def best_type(t1: Type, t2: Type) : Type = {
+    (t1, t2) match {
+      case (TFun(targ1, tbody1), TFun(targ2, tbody2)) => TFun(best_type(targ1, targ2), best_type(tbody1, tbody2))
+      case (Pi(_, abs1), Pi(_, abs2)) => if (abs1.nfields > abs2.nfields) t1 else t2
+      case (TVar(_), _) => t2
+      case (_, TVar(_)) => t1
+      case _ => t1
+    }
 
-              ConstraintSet.union(ConstraintSet(c), substituteInConstraintSet(t1,t2,cs1))
-            }
-        }
+  }
+
+  def hasTypeVariables(t: Type) : Boolean =  {
+    t match {
+      case TFun(targ, tbody) => hasTypeVariables(targ) || hasTypeVariables(tbody)
+      case Pi(fields, abs) => fields.filter(ft => hasTypeVariables(ft.t)).toList.nonEmpty
+      case TVar(_) => true
+      case _ => false
+    }
+  }
+
+  def substituteInConstraintSet(oldType: Type, newType: Type, cs: ConstraintSet, tvar : TVar = TVar(-1)) : ConstraintSet = {
+    cs match {
+      case aConstraintSet(c, cs1) => (c.t1, c.t2) match {
+        case (x @ TVar(i), r1 @ Pi(_, _)) =>
+          newType match {
+            case r2 @ Pi(_,_) =>
+              if (tvar.index != -1 && x == tvar) {
+                val fv = getFreshVar
+                val c1 = Constraint(tvar, fv)
+                val c2 = Constraint(fv, mixRecords(r1, r2))
+                ConstraintSet.union(ConstraintSet(c2, c1), substituteInConstraintSet(oldType, newType, cs1, x))
+              }
+              else aConstraintSet(Constraint(substituteInType(c.t1, oldType, newType), substituteInType(c.t2, oldType, newType)),
+                substituteInConstraintSet(oldType, newType, cs1, x))
+            case _ => aConstraintSet(Constraint(substituteInType(c.t1, oldType, newType), substituteInType(c.t2, oldType, newType)),
+                                      substituteInConstraintSet(oldType, newType, cs1, tvar))
+          }
+        case _=> aConstraintSet(Constraint(substituteInType(c.t1, oldType, newType), substituteInType(c.t2, oldType, newType)),
+                                substituteInConstraintSet(oldType, newType, cs1, tvar))
       }
       case EmptyConstraintSet() => EmptyConstraintSet()
     }
   }
 
-  def mixRecords(t1: TRecord, t2: TRecord) : TRecord = {
-    TRecord(t1.tfields++t2.tfields)
+  def substituteInType(in: Type, oldType: Type, newType: Type) : Type = {
+    in match {
+      case TFun(targ, tbody) =>
+        TFun(substituteInType(targ, oldType, newType), substituteInType(tbody, oldType, newType))
+      case Pi(fields, abs) =>
+        Pi(fields.map(ft => FieldType(ft.name, ft.fieldFlag, substituteInType(ft.t, oldType, newType))), abs)
+      case _ => if (in == oldType) newType else in
+    }
+  }
+
+  def mixRecords(t1: Pi, t2: Pi) : Pi = {
+    Pi(t1.tfields union t2.tfields, Absent(t1.abs.nfields + t2.abs.nfields))
   }
 
   def unify(cs: ConstraintSet) : Substitution = {
@@ -147,17 +179,18 @@ object TypeChecker {
         c match {
           case Constraint(t1, t2) => t1 match {
             case TVar(i) => t2 match {
-              case TRecord(fields) => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
+              case Pi(_,_) => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1,TVar(i))), SimpleSubstitution(t1, t2))
               case _ => ComplexSubstitution(unify(substituteInConstraintSet(t1,t2,cs1)), SimpleSubstitution(t1, t2))
             }
             case TFun(t3, t4) => t2 match {
               case TFun(t5, t6) => unify(ConstraintSet.union(cs1, ConstraintSet(Constraint(t3, t5), Constraint(t4, t6))))
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
             }
-            case r1 @ TRecord(fields1)  => t2 match {
-              case r2 @ TRecord(fields2) => unify(ConstraintSet.union(cs1, ConstraintSet(fields1.zip(fields2).map(trpp => Constraint(trpp._1.t, trpp._2.t)):_*)))
-              //ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
-              case _ => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
+            case r1 @ Pi(fields1, abs)  => t2 match {
+              case r2 @ Pi(fields2, abs) =>
+                val fieldToField = ConstraintSet(fields1.zip(fields2).map(trpp => Constraint(trpp._1.t, trpp._2.t)).toSeq:_*)
+                unify(ConstraintSet.union(cs1, fieldToField))
+              case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2, t1, cs1)), SimpleSubstitution(t2, t1))
             }
             case _ => t2 match {
               case TVar(i) => ComplexSubstitution(unify(substituteInConstraintSet(t2,t1,cs1)), SimpleSubstitution(t2, t1))
@@ -192,7 +225,16 @@ object TypeChecker {
     println(type_and_constraints)
     println(constraints_unified)
     val type_resolved = TypeChecker.queryType(type_and_constraints.t, constraints_unified)
-    type_resolved
+    clean_type(type_resolved)
+
+  }
+
+  private def clean_type(t: Type) : Type = {
+    t match {
+      case Pi(fields, abs) => TRecord(fields.map(ft => TField(ft.name, ft.t)))
+      case TFun(targ, tbody) => TFun(clean_type(targ), clean_type(tbody))
+      case _ => t
+    }
   }
 
   def env_lookup (env : Env, s : Symbol) : Any = {

@@ -43,15 +43,15 @@ class InferenceFunComplexTest2 extends FlatSpec with Matchers {
 
 class InferenceRecordTest1 extends FlatSpec with Matchers {
   val exp1 = Record(List(RecPair('a, Num(4)), RecPair('b, Fun(TypeChecker.getFreshVar, Id('x), Mul(Id('x), Num(2))))))
-  s"The type of the expression $exp1" should "return TRecord(List(TRecPair('a, TNum()), TRecPair('b, TFun(TNum(), TNum()))))" in {
-    assert(TypeChecker.typeof(exp1) == TRecord(List(TRecPair('a, TNum()), TRecPair('b, TFun(TNum(), TNum())))))
+  s"The type of the expression $exp1" should "return TRecord(Set(TField('a, TNum()), TField('b, TFun(TNum(), TNum()))))" in {
+    assert(TypeChecker.typeof(exp1) == TRecord(Set(TField('a, TNum()), TField('b, TFun(TNum(), TNum())))))
   }
 }
 
 class InferenceRecordTest2 extends FlatSpec with Matchers {
   val exp2 = Fun(TypeChecker.getFreshVar, Id('x), Record(List(RecPair('a, Mul(Id('x), Num(2))), RecPair('b, Fun(TypeChecker.getFreshVar, Id('y), Mul(Id('x), Id('y)))))))
-  s"The type of the expression $exp2" should "return TFun(TNum(), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TFun(TNum(), TNum())))))" in {
-    assert(TypeChecker.typeof(exp2) == TFun(TNum(), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TFun(TNum(), TNum()))))))
+  s"The type of the expression $exp2" should "return TFun(TNum(), TRecord(Set(TField('a, TNum()), TField('b, TFun(TNum(), TNum())))))" in {
+    assert(TypeChecker.typeof(exp2) == TFun(TNum(), TRecord(Set(TField('a, TNum()), TField('b, TFun(TNum(), TNum()))))))
   }
 }
 
@@ -72,7 +72,7 @@ class InferenceRecordTest4 extends FlatSpec with Matchers {
 class InferenceRecordTest5 extends FlatSpec with Matchers {
   val exp1 = With(Id('x), TypeChecker.getFreshVar, Mul(RecordAccess(Id('r), 'a), Num(2)), With(Id('y),TypeChecker.getFreshVar ,Add(RecordAccess(Id('r), 'b), Num(2)), Id('r)))
   val exp = Fun(TypeChecker.getFreshVar, Id('r), exp1)
-  s"The type of the expression $exp" should "return TFun(TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))))" in {
-    assert(TypeChecker.typeof(exp) == TFun(TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum()))), TRecord(List(TRecPair('a, TNum()), TRecPair('b, TNum())))))
+  s"The type of the expression $exp" should "return TFun(TRecord(Set(TField('a, TNum()), TField('b, TNum()))), TRecord(Set(TField('a, TNum()), TField('b, TNum()))))" in {
+    assert(TypeChecker.typeof(exp) == TFun(TRecord(Set(TField('a, TNum()), TField('b, TNum()))), TRecord(Set(TField('a, TNum()), TField('b, TNum())))))
   }
 }
