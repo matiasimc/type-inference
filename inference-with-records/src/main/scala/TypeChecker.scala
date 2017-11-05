@@ -109,7 +109,6 @@ object TypeChecker {
     subst match {
       case ComplexSubstitution(s1, s2) =>
         queryType(queryType(tv, s2), s1)
-        queryType(tv, s1)
       case EmptySubstitution() => tv
       case SimpleSubstitution(t1, t2) => search_rec(tv, t1, t2)
     }
